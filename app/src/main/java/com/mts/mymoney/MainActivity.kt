@@ -3,19 +3,25 @@ package com.mts.mymoney // Certifique-se de que este é o pacote correto do seu 
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,8 +32,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Delete
@@ -41,16 +47,15 @@ import androidx.room.RoomDatabase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
-import kotlinx.coroutines.flow.first
 
 // ==========================================
 // 1. CAMADA DE DADOS (ROOM ENTITIES & DAO)
 // ==========================================
 
-// Define a tabela de Contas
 @Entity(tableName = "accounts")
 data class AccountEntity(
     @PrimaryKey
@@ -58,22 +63,20 @@ data class AccountEntity(
     val name: String
 )
 
-// Define a tabela de Transações
 @Entity(tableName = "transactions")
 data class TransactionEntity(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
-    val accountId: String, // Chave estrangeira (vinculação)
-    val description: String,
+    val accountId: String,
+    val description: String, // Será salva como string vazia se opcional
     val amount: Double,
     val isIncome: Boolean
 )
 
 @Dao
 interface FinanceDao {
-    // --- Operações de Contas ---
     @Query("SELECT * FROM accounts")
-    fun getAllAccountsFlow(): Flow<List<AccountEntity>> // Retorna atualizações em tempo real
+    fun getAllAccountsFlow(): Flow<List<AccountEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAccount(account: AccountEntity)
@@ -81,14 +84,12 @@ interface FinanceDao {
     @Delete
     suspend fun deleteAccount(account: AccountEntity)
 
-    // --- Operações de Transações ---
     @Query("SELECT * FROM transactions ORDER BY id DESC")
     fun getAllTransactionsFlow(): Flow<List<TransactionEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: TransactionEntity)
 
-    // Deleta todas as transações de uma conta específica (integridade)
     @Query("DELETE FROM transactions WHERE accountId = :accountId")
     suspend fun deleteTransactionsByAccount(accountId: String)
 }
@@ -101,7 +102,6 @@ interface FinanceDao {
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun financeDao(): FinanceDao
 
-    // Padrão Singleton para garantir instância única
     companion object {
         @Volatile
         private var INSTANCE: FinanceDatabase? = null
@@ -113,7 +113,7 @@ abstract class FinanceDatabase : RoomDatabase() {
                     FinanceDatabase::class.java,
                     "finance_database"
                 )
-                    .fallbackToDestructiveMigration() // Recria o DB se houver mudança de versão sem migração definida
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance
@@ -128,7 +128,6 @@ abstract class FinanceDatabase : RoomDatabase() {
 
 class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
 
-    // Transforma o Flow do Room em um StateFlow observável pelo Compose
     val accountsFlow: StateFlow<List<AccountEntity>> = dao.getAllAccountsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -136,17 +135,14 @@ class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
-        // Ao abrir o app, o ViewModel verifica o banco de dados real UMA vez
         viewModelScope.launch {
             val currentAccounts = dao.getAllAccountsFlow().first()
-            // Só cria a "Carteira Física" se o banco realmente estiver vazio
             if (currentAccounts.isEmpty()) {
                 dao.insertAccount(AccountEntity(name = "Carteira Física"))
             }
         }
     }
 
-    // Ações de persistência (rodando em coroutines)
     fun addAccount(name: String) {
         viewModelScope.launch {
             dao.insertAccount(AccountEntity(name = name))
@@ -155,9 +151,7 @@ class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
 
     fun deleteAccount(account: AccountEntity) {
         viewModelScope.launch {
-            // 1. Limpa transações vinculadas
             dao.deleteTransactionsByAccount(account.id)
-            // 2. Deleta a conta
             dao.deleteAccount(account)
         }
     }
@@ -167,7 +161,7 @@ class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
             dao.insertTransaction(
                 TransactionEntity(
                     accountId = accountId,
-                    description = description,
+                    description = description.trim(), // Salva a descrição (pode ser vazia)
                     amount = amount,
                     isIncome = isIncome
                 )
@@ -176,7 +170,6 @@ class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
     }
 }
 
-// Factory para injetar o DAO no ViewModel
 class FinanceViewModelFactory(private val dao: FinanceDao) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(FinanceViewModel::class.java)) {
@@ -216,16 +209,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Inicializa o banco de dados e obtém o DAO
         val database = FinanceDatabase.getDatabase(this)
         val dao = database.financeDao()
         val viewModelFactory = FinanceViewModelFactory(dao)
 
         setContent {
             MaterialTheme(colorScheme = FinanceDarkColorScheme) {
-                // Obtém o ViewModel usando a Factory
                 val viewModel: FinanceViewModel = viewModel(factory = viewModelFactory)
-
                 FinanceApp(viewModel)
             }
         }
@@ -236,236 +226,250 @@ class MainActivity : ComponentActivity() {
 // 6. INTERFACE GRÁFICA (COMPOSE UI)
 // ==========================================
 
+// Definindo as rotas de navegação simples
+const val SCREEN_DASHBOARD = "dashboard"
+const val SCREEN_HISTORY = "history"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FinanceApp(viewModel: FinanceViewModel) {
-    // Coleta os estados do DB em tempo real (Persistente)
     val accounts by viewModel.accountsFlow.collectAsStateWithLifecycle()
     val transactions by viewModel.transactionsFlow.collectAsStateWithLifecycle()
 
+    // Estado de navegação simples
+    var currentScreen by rememberSaveable { mutableStateOf(SCREEN_DASHBOARD) }
+
     var showNewAccountDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            LargeTopAppBar(
-                title = {
-                    Text(
-                        "Minhas Finanças",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+    // Enquanto o DB inicializa, mostra tela de carregamento
+    if (accounts.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+        return
+    }
+
+    // Lida com o botão 'Voltar' do sistema
+    BackHandler(enabled = currentScreen == SCREEN_HISTORY) {
+        currentScreen = SCREEN_DASHBOARD
+    }
+
+    // Estrutura de navegação usando when
+    when (currentScreen) {
+        SCREEN_DASHBOARD -> {
+            Scaffold(
+                topBar = {
+                    LargeTopAppBar(
+                        title = { Text("Minhas Finanças", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                        actions = {
+                            IconButton(onClick = { showNewAccountDialog = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "Nova Conta", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        },
+                        colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = MaterialTheme.colorScheme.background)
                     )
                 },
-                actions = {
-                    IconButton(onClick = { showNewAccountDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Nova Conta", tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                containerColor = MaterialTheme.colorScheme.background
+            ) { paddingValues ->
+                DashboardScreen(
+                    modifier = Modifier.padding(paddingValues),
+                    accounts = accounts,
+                    transactions = transactions,
+                    onAddTransaction = { accountId, desc, amount, isIncome ->
+                        viewModel.addTransaction(accountId, desc, amount, isIncome)
+                    },
+                    onDeleteAccount = { viewModel.deleteAccount(it) },
+                    onNavigateToHistory = { currentScreen = SCREEN_HISTORY }
                 )
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { paddingValues ->
-        // Fix: Avoid crash by only showing content if there's at least one account
-        if (accounts.isNotEmpty()) {
-            FinanceScreenContent(
-                modifier = Modifier.padding(paddingValues),
-                accounts = accounts,
-                transactions = transactions,
-                onAddTransaction = { accountId, desc, amount, isIncome ->
-                    viewModel.addTransaction(accountId, desc, amount, isIncome)
-                },
-                onDeleteAccount = { viewModel.deleteAccount(it) }
-            )
-        } else {
-            // Optional: Loading or empty state
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
             }
         }
-
-        if (showNewAccountDialog) {
-            NewAccountDialog(
-                onDismiss = { showNewAccountDialog = false },
-                onConfirm = { name ->
-                    viewModel.addAccount(name)
-                    showNewAccountDialog = false
-                }
+        SCREEN_HISTORY -> {
+            TransactionHistoryScreen(
+                accounts = accounts,
+                transactions = transactions,
+                onBack = { currentScreen = SCREEN_DASHBOARD }
             )
         }
     }
+
+    // Diálogo de nova conta (comum a estrutura)
+    if (showNewAccountDialog) {
+        NewAccountDialog(
+            onDismiss = { showNewAccountDialog = false },
+            onConfirm = { name ->
+                viewModel.addAccount(name)
+                showNewAccountDialog = false
+            }
+        )
+    }
 }
 
+// --- TELA 1: DASHBOARD E INSERÇÃO ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FinanceScreenContent(
+fun DashboardScreen(
     modifier: Modifier = Modifier,
     accounts: List<AccountEntity>,
     transactions: List<TransactionEntity>,
     onAddTransaction: (String, String, Double, Boolean) -> Unit,
-    onDeleteAccount: (AccountEntity) -> Unit
+    onDeleteAccount: (AccountEntity) -> Unit,
+    onNavigateToHistory: () -> Unit // Função para navegar
 ) {
     var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var isIncome by remember { mutableStateOf(true) }
 
-    // Inicializa com a primeira conta disponível (Garantido não vazio pelo if no FinanceApp)
-    var selectedAccount by remember(accounts) { mutableStateOf(accounts.first()) }
+    var selectedAccount by remember { mutableStateOf(accounts.first()) }
     var accountDropdownExpanded by remember { mutableStateOf(false) }
-
-    var viewFilterAccount by remember { mutableStateOf<AccountEntity?>(null) }
     var accountToDelete by remember { mutableStateOf<AccountEntity?>(null) }
 
-    val filteredTransactions = if (viewFilterAccount == null) {
-        transactions
-    } else {
-        transactions.filter { it.accountId == viewFilterAccount!!.id }
-    }
-
+    // Garante que a conta selecionada existe na lista
     LaunchedEffect(accounts) {
         if (!accounts.contains(selectedAccount)) {
-            selectedAccount = accounts.lastOrNull() ?: accounts.first()
+            selectedAccount = accounts.last()
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    // Layout principal ajustado: Column com fillMaxSize e verticalScroll
+    // faz com que os elementos colem no topo e rolem se necessário.
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()) // Permite rolar o dashboard inteiro
+            .padding(horizontal = 16.dp)
+    ) {
+
+        // --- DASHBOARD: SALDO TOTAL E BLOCOS DAS CONTAS ---
+        // Passamos null para viewFilterAccount para mostrar o Saldo Geral Total
         DashboardHeader(
             accounts = accounts,
             transactions = transactions,
-            viewFilterAccount = viewFilterAccount,
+            viewFilterAccount = null,
             onDeleteAccount = { accountToDelete = it }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Column(modifier = Modifier
-            .padding(horizontal = 16.dp)
-            .weight(1f)) {
+        // --- FORMULÁRIO EXPRESSIVE (Removido o peso weight(1f) para não centralizar) ---
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Nova Transação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
 
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Nova Transação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    ExposedDropdownMenuBox(
+                ExposedDropdownMenuBox(
+                    expanded = accountDropdownExpanded,
+                    onExpandedChange = { accountDropdownExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedAccount.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountDropdownExpanded) },
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
                         expanded = accountDropdownExpanded,
-                        onExpandedChange = { accountDropdownExpanded = it }
+                        onDismissRequest = { accountDropdownExpanded = false }
                     ) {
-                        OutlinedTextField(
-                            value = selectedAccount.name,
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountDropdownExpanded) },
-                            modifier = Modifier
-                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                                .fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(
-                            expanded = accountDropdownExpanded,
-                            onDismissRequest = { accountDropdownExpanded = false }
-                        ) {
-                            accounts.forEach { account ->
-                                DropdownMenuItem(
-                                    text = { Text(account.name) },
-                                    onClick = {
-                                        selectedAccount = account
-                                        accountDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = description,
-                            onValueChange = { description = it },
-                            label = { Text("Descrição") },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        OutlinedTextField(
-                            value = amount,
-                            onValueChange = { amount = it },
-                            label = { Text("Valor") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(0.6f),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Despesa", color = if (!isIncome) ExpenseColor else Color.Gray, fontSize = 14.sp)
-                            Switch(
-                                checked = isIncome,
-                                onCheckedChange = { isIncome = it },
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.surface,
-                                    checkedTrackColor = IncomeColor,
-                                    uncheckedThumbColor = MaterialTheme.colorScheme.surface,
-                                    uncheckedTrackColor = ExpenseColor
-                                )
-                            )
-                            Text("Receita", color = if (isIncome) IncomeColor else Color.Gray, fontSize = 14.sp)
-                        }
-
-                        Button(
-                            onClick = {
-                                val amountValue = amount.replace(",", ".").toDoubleOrNull()
-                                if (description.isNotBlank() && amountValue != null) {
-                                    onAddTransaction(selectedAccount.id, description, amountValue, isIncome)
-                                    description = ""
-                                    amount = ""
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    selectedAccount = account
+                                    accountDropdownExpanded = false
                                 }
-                            },
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Text("Adicionar")
+                            )
                         }
                     }
                 }
-            }
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Descrição (Opcional)") }, // UI indicando opcional
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        label = { Text("Valor") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(0.6f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Movimentações", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                FilterChip(
-                    selected = viewFilterAccount != null,
-                    onClick = { viewFilterAccount = if (viewFilterAccount?.id == selectedAccount.id) null else selectedAccount },
-                    label = { Text(if (viewFilterAccount == null) "Todas" else selectedAccount.name) },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Filtrar") }
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Despesa", color = if (!isIncome) ExpenseColor else Color.Gray, fontSize = 14.sp)
+                        Switch(
+                            checked = isIncome,
+                            onCheckedChange = { isIncome = it },
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MaterialTheme.colorScheme.surface,
+                                checkedTrackColor = IncomeColor,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.surface,
+                                uncheckedTrackColor = ExpenseColor
+                            )
+                        )
+                        Text("Receita", color = if (isIncome) IncomeColor else Color.Gray, fontSize = 14.sp)
+                    }
 
-            LazyColumn(modifier = Modifier.fillMaxHeight()) {
-                items(filteredTransactions) { transaction ->
-                    val accName = accounts.find { it.id == transaction.accountId }?.name ?: "Desconhecida"
-                    TransactionItem(transaction, accName)
+                    Button(
+                        onClick = {
+                            val amountValue = amount.replace(",", ".").toDoubleOrNull()
+                            // Alterado: Descrição não é mais obrigatória (isNotBlank removido)
+                            if (amountValue != null) {
+                                onAddTransaction(selectedAccount.id, description, amountValue, isIncome)
+                                description = ""
+                                amount = ""
+                            }
+                        },
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text("Adicionar")
+                    }
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // --- NOVO: BOTÃO DEDICADO PARA HISTÓRICO ---
+        ElevatedButton(
+            onClick = onNavigateToHistory,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.elevatedButtonColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        ) {
+            Icon(Icons.Default.History, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Ver Histórico Completo", fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(24.dp)) // Espaço final para não colar no fundo
     }
 
+    // Diálogo de exclusão de conta
     if (accountToDelete != null) {
         AlertDialog(
             onDismissRequest = { accountToDelete = null },
@@ -475,9 +479,6 @@ fun FinanceScreenContent(
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     onClick = {
-                        if (viewFilterAccount?.id == accountToDelete!!.id) {
-                            viewFilterAccount = null
-                        }
                         onDeleteAccount(accountToDelete!!)
                         accountToDelete = null
                     }
@@ -495,6 +496,93 @@ fun FinanceScreenContent(
         )
     }
 }
+
+// --- TELA 2: HISTÓRICO DE MOVIMENTAÇÕES (SEPARADA) ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TransactionHistoryScreen(
+    accounts: List<AccountEntity>,
+    transactions: List<TransactionEntity>,
+    onBack: () -> Unit
+) {
+    // Estado do filtro (local desta tela)
+    var selectedFilterAccount by remember { mutableStateOf<AccountEntity?>(null) }
+
+    // Aplica o filtro
+    val filteredTransactions = if (selectedFilterAccount == null) {
+        transactions
+    } else {
+        transactions.filter { it.accountId == selectedFilterAccount!!.id }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Histórico de Movimentações", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
+            // Seletor de filtro (Chips)
+            Text("Filtrar por conta:", style = MaterialTheme.typography.titleSmall, color = Color.Gray)
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Opção 'Todas'
+                item {
+                    FilterChip(
+                        selected = selectedFilterAccount == null,
+                        onClick = { selectedFilterAccount = null },
+                        label = { Text("Todas") },
+                        leadingIcon = { if (selectedFilterAccount == null) Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
+                    )
+                }
+                // Lista de contas
+                items(accounts) { account ->
+                    FilterChip(
+                        selected = selectedFilterAccount?.id == account.id,
+                        onClick = { selectedFilterAccount = account },
+                        label = { Text(account.name) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Lista de Movimentações (LazyColumn aqui)
+            if (filteredTransactions.isEmpty()) {
+                Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    Text("Nenhuma movimentação encontrada.", color = Color.Gray)
+                }
+            } else {
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    items(filteredTransactions) { transaction ->
+                        val accName = accounts.find { it.id == transaction.accountId }?.name ?: "Desconhecida"
+                        TransactionItem(transaction, accName)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 7. COMPONENTES REUTILIZÁVEIS
+// ==========================================
 
 @Composable
 fun DashboardHeader(
@@ -532,7 +620,7 @@ fun DashboardHeader(
 
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(horizontal = 0.dp), // Ajustado para colar nas bordas do dashboard
             modifier = Modifier.fillMaxWidth()
         ) {
             items(accounts) { account ->
@@ -547,21 +635,40 @@ fun DashboardHeader(
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.Center
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(account.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                "R$ ${"%.2f".format(accountBalance)}",
-                                color = if (accountBalance >= 0) IncomeColor else ExpenseColor,
-                                style = MaterialTheme.typography.titleMedium
+                                text = account.name,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                modifier = Modifier.padding(end = 24.dp)
+                            )
+                            Text(
+                                text = "R$ ${"%.2f".format(accountBalance)}",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = if (accountBalance >= 0) IncomeColor else ExpenseColor
                             )
                         }
-                        IconButton(
-                            onClick = { onDeleteAccount(account) },
-                            modifier = Modifier.align(Alignment.TopEnd)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Excluir", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+
+                        if (accounts.size > 1) {
+                            IconButton(
+                                onClick = { onDeleteAccount(account) },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 4.dp, y = (-4).dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Excluir Conta",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -573,22 +680,33 @@ fun DashboardHeader(
 @Composable
 fun TransactionItem(transaction: TransactionEntity, accountName: String) {
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(transaction.description, fontWeight = FontWeight.SemiBold)
-                Text(accountName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Exibe "(Sem descrição)" se estiver vazio
+                Text(
+                    text = transaction.description.ifBlank { "(Sem descrição)" },
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (transaction.description.isBlank()) Color.Gray else MaterialTheme.colorScheme.onSurface
+                )
+                Text(text = accountName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
                 text = "${if (transaction.isIncome) "+" else "-"} R$ ${"%.2f".format(transaction.amount)}",
                 color = if (transaction.isIncome) IncomeColor else ExpenseColor,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -605,20 +723,22 @@ fun NewAccountDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Nome da Conta") },
+                label = { Text("Nome (ex: Nubank)") },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp)
             )
         },
         confirmButton = {
             Button(onClick = { if (name.isNotBlank()) onConfirm(name) }) {
-                Text("Criar")
+                Text("Gravar")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Cancelar")
             }
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(24.dp)
     )
 }
