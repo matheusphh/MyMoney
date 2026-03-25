@@ -124,7 +124,7 @@ abstract class FinanceDatabase : RoomDatabase() {
 }
 
 // ==========================================
-// 3. CAMADA DE VIEWMODEL (PONTE ENTRE UI E DB)
+// 3. CAMADA DE VIEWMODEL
 // ==========================================
 
 class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
