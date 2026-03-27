@@ -1,7 +1,9 @@
 package com.mts.mymoney // Certifique-se de que este é o pacote correto do seu projeto
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -19,17 +21,19 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen // NOVO: Import da Splash Screen
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,7 +65,8 @@ import java.util.UUID
 data class AccountEntity(
     @PrimaryKey
     val id: String = UUID.randomUUID().toString(),
-    val name: String
+    val name: String,
+    val linkedPackageName: String? = null // Adicionado para vinculação automática
 )
 
 @Entity(tableName = "transactions")
@@ -99,7 +104,7 @@ interface FinanceDao {
 // 2. CONFIGURAÇÃO DO BANCO DE DADOS (ROOM)
 // ==========================================
 
-@Database(entities = [AccountEntity::class, TransactionEntity::class], version = 1)
+@Database(entities = [AccountEntity::class, TransactionEntity::class], version = 2) // Versão atualizada para refletir a mudança
 abstract class FinanceDatabase : RoomDatabase() {
     abstract fun financeDao(): FinanceDao
 
@@ -124,7 +129,7 @@ abstract class FinanceDatabase : RoomDatabase() {
 }
 
 // ==========================================
-// 3. CAMADA DE VIEWMODEL
+// 3. CAMADA DE VIEWMODEL (PONTE ENTRE UI E DB)
 // ==========================================
 
 class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
@@ -135,27 +140,24 @@ class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
     val transactionsFlow: StateFlow<List<TransactionEntity>> = dao.getAllTransactionsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // --- CORREÇÃO: CÓDIGO DE INICIALIZAÇÃO PARA PREVENIR DUPLICAÇÃO ---
     init {
         viewModelScope.launch {
-            val currentAccounts = dao.getAllAccountsFlow().first() // Verifica o DB real
+            val currentAccounts = dao.getAllAccountsFlow().first()
             if (currentAccounts.isEmpty()) {
                 dao.insertAccount(AccountEntity(name = "Carteira Física"))
             }
         }
     }
 
-    fun addAccount(name: String) {
+    fun addAccount(name: String, linkedPackage: String? = null) {
         viewModelScope.launch {
-            dao.insertAccount(AccountEntity(name = name))
+            dao.insertAccount(AccountEntity(name = name, linkedPackageName = linkedPackage))
         }
     }
 
     fun deleteAccount(account: AccountEntity) {
         viewModelScope.launch {
-            // 1. Limpa transações vinculadas
             dao.deleteTransactionsByAccount(account.id)
-            // 2. Deleta a conta
             dao.deleteAccount(account)
         }
     }
@@ -165,7 +167,7 @@ class FinanceViewModel(private val dao: FinanceDao) : ViewModel() {
             dao.insertTransaction(
                 TransactionEntity(
                     accountId = accountId,
-                    description = description.trim(), // Salva descrição (pode ser vazia)
+                    description = description.trim(),
                     amount = amount,
                     isIncome = isIncome
                 )
@@ -197,7 +199,7 @@ val FinanceDarkColorScheme = darkColorScheme(
     onSurface = Color(0xFFE6E1E5),
     surfaceVariant = Color(0xFF292A2D),
     onSurfaceVariant = Color(0xFFCAC4D0),
-    background = Color(0xFF000000), // Cor de fundo principal
+    background = Color(0xFF141218),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005)
 )
@@ -211,12 +213,7 @@ val ExpenseColor = Color(0xFFFFB4AB)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-
-        // ==========================================
-        // NOVO: ATIVAÇÃO DA SPLASH SCREEN NATIVA
-        // ==========================================
         installSplashScreen()
-
         super.onCreate(savedInstanceState)
 
         val database = FinanceDatabase.getDatabase(this)
@@ -236,7 +233,6 @@ class MainActivity : ComponentActivity() {
 // 6. INTERFACE GRÁFICA (COMPOSE UI)
 // ==========================================
 
-// Definindo as rotas de navegação simples
 const val SCREEN_DASHBOARD = "dashboard"
 const val SCREEN_HISTORY = "history"
 
@@ -246,12 +242,9 @@ fun FinanceApp(viewModel: FinanceViewModel) {
     val accounts by viewModel.accountsFlow.collectAsStateWithLifecycle()
     val transactions by viewModel.transactionsFlow.collectAsStateWithLifecycle()
 
-    // Estado de navegação simples
     var currentScreen by rememberSaveable { mutableStateOf(SCREEN_DASHBOARD) }
-
     var showNewAccountDialog by remember { mutableStateOf(false) }
 
-    // Enquanto o DB inicializa, mostra tela de carregamento (Garante que há conta antes de processar)
     if (accounts.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
@@ -259,19 +252,16 @@ fun FinanceApp(viewModel: FinanceViewModel) {
         return
     }
 
-    // Lida com o botão 'Voltar' físico do sistema
     BackHandler(enabled = currentScreen == SCREEN_HISTORY) {
         currentScreen = SCREEN_DASHBOARD
     }
 
-    // Estrutura de navegação usando when
     when (currentScreen) {
         SCREEN_DASHBOARD -> {
             Scaffold(
                 topBar = {
-                    // --- CORREÇÃO: TopAppBar Padrão (Coloca Título e Ações na mesma linha no topo) ---
                     TopAppBar(
-                        title = { Text("Minhas Finanças", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                        title = { Text("Minhas finanças", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
                         actions = {
                             IconButton(onClick = { showNewAccountDialog = true }) {
                                 Icon(Icons.Default.Add, contentDescription = "Nova Conta", tint = MaterialTheme.colorScheme.primary)
@@ -282,7 +272,6 @@ fun FinanceApp(viewModel: FinanceViewModel) {
                 },
                 containerColor = MaterialTheme.colorScheme.background
             ) { paddingValues ->
-                // CORREÇÃO: Verificação de segurança para garantir conta antes de carregar
                 if (accounts.isNotEmpty()) {
                     DashboardScreen(
                         modifier = Modifier.padding(paddingValues),
@@ -306,19 +295,17 @@ fun FinanceApp(viewModel: FinanceViewModel) {
         }
     }
 
-    // Diálogo de nova conta
     if (showNewAccountDialog) {
         NewAccountDialog(
             onDismiss = { showNewAccountDialog = false },
-            onConfirm = { name ->
-                viewModel.addAccount(name)
+            onConfirm = { name, pkg ->
+                viewModel.addAccount(name, pkg)
                 showNewAccountDialog = false
             }
         )
     }
 }
 
-// --- TELA 1: DASHBOARD E INSERÇÃO ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -327,46 +314,48 @@ fun DashboardScreen(
     transactions: List<TransactionEntity>,
     onAddTransaction: (String, String, Double, Boolean) -> Unit,
     onDeleteAccount: (AccountEntity) -> Unit,
-    onNavigateToHistory: () -> Unit // Função para navegar
+    onNavigateToHistory: () -> Unit
 ) {
-    // Estados do formulário (Locais)
+    val context = LocalContext.current
     var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var isIncome by remember { mutableStateOf(true) }
 
-    // Inicializa com a primeira conta disponível (Garantido não vazio)
     var selectedAccount by remember { mutableStateOf(accounts.first()) }
     var accountDropdownExpanded by remember { mutableStateOf(false) }
     var accountToDelete by remember { mutableStateOf<AccountEntity?>(null) }
 
-    // Garante que a conta selecionada no formulário existe (caso outras sejam deletadas)
     LaunchedEffect(accounts) {
         if (!accounts.contains(selectedAccount)) {
             selectedAccount = accounts.last()
         }
     }
 
-    // --- CORREÇÃO: Alinhamento no Topo ---
-    // Layout principal ajustado: Column com fillMaxSize e verticalScroll
-    // faz com que os elementos colem no topo e rolem se necessário (sem centralizar weight(1f)).
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()) // Permite rolar o dashboard inteiro
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
+        // Botão para ativar leitura de notificações (Acesso rápido para testes)
+        TextButton(
+            onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Ativar Leitura Automática", fontSize = 12.sp)
+        }
 
-        // --- DASHBOARD: SALDO TOTAL E BLOCOS DAS CONTAS ---
         DashboardHeader(
             accounts = accounts,
             transactions = transactions,
-            viewFilterAccount = null, // Saldo Geral Total
+            viewFilterAccount = null,
             onDeleteAccount = { accountToDelete = it }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- FORMULÁRIO EXPRESSIVE (Removido o peso weight(1f) para não centralizar verticalmente) ---
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
@@ -386,7 +375,7 @@ fun DashboardScreen(
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountDropdownExpanded) },
                         modifier = Modifier
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable) // Correção da função taxada
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -411,8 +400,7 @@ fun DashboardScreen(
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
-                        // --- CORREÇÃO: Descrição Opcional (UI) ---
-                        label = { Text("Descrição") },
+                        label = { Text("Descrição (Opcional)") },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -451,7 +439,6 @@ fun DashboardScreen(
                     Button(
                         onClick = {
                             val amountValue = amount.replace(",", ".").toDoubleOrNull()
-                            // --- CORREÇÃO: Descrição não é mais obrigatória (removido isNotBlank()) ---
                             if (amountValue != null) {
                                 onAddTransaction(selectedAccount.id, description, amountValue, isIncome)
                                 description = ""
@@ -468,7 +455,6 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- NOVO: BOTÃO DEDICADO PARA HISTÓRICO ---
         ElevatedButton(
             onClick = onNavigateToHistory,
             modifier = Modifier.fillMaxWidth(),
@@ -483,15 +469,14 @@ fun DashboardScreen(
             Text("Ver Histórico Completo", fontWeight = FontWeight.Bold)
         }
 
-        Spacer(modifier = Modifier.height(24.dp)) // Espaço final para não colar no fundo
+        Spacer(modifier = Modifier.height(24.dp))
     }
 
-    // Diálogo de exclusão de conta
     if (accountToDelete != null) {
         AlertDialog(
             onDismissRequest = { accountToDelete = null },
             title = { Text("Excluir Conta") },
-            text = { Text("Tem certeza que deseja excluir a conta '${accountToDelete!!.name}'? Todas as movimentações vinculadas a ela também serão apagadas permanentemente.") },
+            text = { Text("Tem certeza que deseja excluir '${accountToDelete!!.name}'? Todas as movimentações serão apagadas.") },
             confirmButton = {
                 Button(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
@@ -504,9 +489,7 @@ fun DashboardScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { accountToDelete = null }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { accountToDelete = null }) { Text("Cancelar") }
             },
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(24.dp)
@@ -514,7 +497,6 @@ fun DashboardScreen(
     }
 }
 
-// --- TELA 2: HISTÓRICO DE MOVIMENTAÇÕES (SEPARADA) ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionHistoryScreen(
@@ -522,10 +504,8 @@ fun TransactionHistoryScreen(
     transactions: List<TransactionEntity>,
     onBack: () -> Unit
 ) {
-    // Estado do filtro (local desta tela)
     var selectedFilterAccount by remember { mutableStateOf<AccountEntity?>(null) }
 
-    // Aplica o filtro
     val filteredTransactions = if (selectedFilterAccount == null) {
         transactions
     } else {
@@ -552,23 +532,20 @@ fun TransactionHistoryScreen(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            // Seletor de filtro (Chips)
             Text("Filtrar por conta:", style = MaterialTheme.typography.titleSmall, color = Color.Gray)
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Opção 'Todas'
                 item {
                     FilterChip(
                         selected = selectedFilterAccount == null,
                         onClick = { selectedFilterAccount = null },
                         label = { Text("Todas") },
-                        leadingIcon = { if (selectedFilterAccount == null) Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) } // Ícone corrigido
+                        leadingIcon = { if (selectedFilterAccount == null) Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }
                     )
                 }
-                // Lista de contas
                 items(accounts) { account ->
                     FilterChip(
                         selected = selectedFilterAccount?.id == account.id,
@@ -580,7 +557,6 @@ fun TransactionHistoryScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Lista de Movimentações (LazyColumn aqui)
             if (filteredTransactions.isEmpty()) {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Text("Nenhuma movimentação encontrada.", color = Color.Gray)
@@ -597,10 +573,6 @@ fun TransactionHistoryScreen(
     }
 }
 
-// ==========================================
-// 7. COMPONENTES REUTILIZÁVEIS (COMPONENTES VISUAIS)
-// ==========================================
-
 @Composable
 fun DashboardHeader(
     accounts: List<AccountEntity>,
@@ -608,27 +580,20 @@ fun DashboardHeader(
     viewFilterAccount: AccountEntity?,
     onDeleteAccount: (AccountEntity) -> Unit
 ) {
-    val relevantTransactions = if (viewFilterAccount == null) {
-        transactions
-    } else {
-        transactions.filter { it.accountId == viewFilterAccount.id }
-    }
-
+    val relevantTransactions = if (viewFilterAccount == null) transactions else transactions.filter { it.accountId == viewFilterAccount.id }
     val displayBalance = relevantTransactions.sumOf { if (it.isIncome) it.amount else -it.amount }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally // Centraliza o Saldo Geral
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Título do Saldo
         Text(
             text = if (viewFilterAccount == null) "Saldo Geral" else "Saldo: ${viewFilterAccount.name}",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 16.dp)
+            modifier = Modifier.padding(top = 8.dp)
         )
 
-        // Valor do Saldo Gigante
         Text(
             text = "R$ ${"%.2f".format(displayBalance)}",
             fontSize = 48.sp,
@@ -637,29 +602,24 @@ fun DashboardHeader(
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // Row com os Blocos das Contas (Carrossel Horizontal)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(horizontal = 0.dp), // Ajustado para colar nas bordas do dashboard
+            contentPadding = PaddingValues(horizontal = 0.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             items(accounts) { account ->
-                // Calcula o saldo específico desta conta para mostrar no bloco
                 val accountBalance = transactions
                     .filter { it.accountId == account.id }
                     .sumOf { if (it.isIncome) it.amount else -it.amount }
 
-                // Bloco da Conta (Formato premium)
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.size(width = 156.dp, height = 100.dp)
+                    modifier = Modifier.size(width = 150.dp, height = 100.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp),
+                            modifier = Modifier.fillMaxSize().padding(16.dp),
                             verticalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
@@ -667,7 +627,7 @@ fun DashboardHeader(
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
-                                modifier = Modifier.padding(end = 24.dp) // Abre espaço para o ícone de deletar
+                                modifier = Modifier.padding(end = 24.dp)
                             )
                             Text(
                                 text = "R$ ${"%.2f".format(accountBalance)}",
@@ -677,20 +637,12 @@ fun DashboardHeader(
                             )
                         }
 
-                        // Botão de Deletar (Só aparece se houver mais de 1 conta)
                         if (accounts.size > 1) {
                             IconButton(
                                 onClick = { onDeleteAccount(account) },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 4.dp, y = (-4).dp)
+                                modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Excluir Conta",
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Icon(Icons.Default.Delete, contentDescription = "Excluir Conta", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -700,25 +652,19 @@ fun DashboardHeader(
     }
 }
 
-// Componente visual do Item da Lista de Transações (Persistente)
 @Composable
 fun TransactionItem(transaction: TransactionEntity, accountName: String) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                // --- CORREÇÃO: Exibe "(Sem descrição)" se estiver vazio ---
                 Text(
                     text = transaction.description.ifBlank { "(Sem descrição)" },
                     fontSize = 16.sp,
@@ -737,32 +683,90 @@ fun TransactionItem(transaction: TransactionEntity, accountName: String) {
     }
 }
 
-// Diálogo para criação de nova conta persistente
+// ==========================================
+// 8. DIÁLOGO DE NOVA CONTA (ATUALIZADO COM BANCOS)
+// ==========================================
+
+data class SupportedBank(val name: String, val packageName: String)
+
+val popularBanks = listOf(
+    SupportedBank("Nenhum (Apenas Manual)", ""),
+    SupportedBank("Nubank", "com.nu.production"),
+    SupportedBank("Banco Inter", "br.com.intermedium"),
+    SupportedBank("Itaú", "com.itau"),
+    SupportedBank("Bradesco", "com.bradesco"),
+    SupportedBank("Santander", "com.santander.app"),
+    SupportedBank("Caixa Tem", "br.gov.caixa.tem"),
+    SupportedBank("PicPay", "com.picpay"),
+    SupportedBank("Mercado Pago", "com.mercadopago.wallet")
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewAccountDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+fun NewAccountDialog(onDismiss: () -> Unit, onConfirm: (String, String?) -> Unit) {
     var name by remember { mutableStateOf("") }
+    var selectedBank by remember { mutableStateOf(popularBanks[0]) }
+    var expanded by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Nova Conta") },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Nome (ex: Nubank)") },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
+            Column {
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedBank.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Vincular leitura automática") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        popularBanks.forEach { bank ->
+                            DropdownMenuItem(
+                                text = { Text(bank.name) },
+                                onClick = {
+                                    selectedBank = bank
+                                    expanded = false
+                                    if (name.isBlank() && bank.packageName.isNotEmpty()) {
+                                        name = bank.name
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nome da Conta no App") },
+                    placeholder = { Text("Ex: Nubank PF") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         },
         confirmButton = {
-            Button(onClick = { if (name.isNotBlank()) onConfirm(name) }) {
-                Text("Gravar")
-            }
+            Button(onClick = {
+                if (name.isNotBlank()) {
+                    val pkg = selectedBank.packageName.ifBlank { null }
+                    onConfirm(name, pkg)
+                }
+            }) { Text("Gravar") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(24.dp)
     )
