@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+
 // ==========================================
 // 1. CAMADA DE DADOS (ROOM ENTITIES & DAO)
 // ==========================================
