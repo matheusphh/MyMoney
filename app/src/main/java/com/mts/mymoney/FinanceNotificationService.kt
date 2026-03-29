@@ -45,7 +45,7 @@ class FinanceNotificationService : NotificationListenerService() {
                     val amount = amountStr.toDoubleOrNull()
 
                     if (amount != null) {
-                        val isIncome = fullText.contains("recebeu") || fullText.contains("recebida") || fullText.contains("chegou")
+                        val isIncome = fullText.contains("recebeu") || fullText.contains("recebida") || fullText.contains("chegou") || fullText.contains("te enviou") || fullText.contains("creditado")
 
                         // 4. Se chegou até aqui, é uma notificação válida. Anotamos no caderninho!
                         processedCache.add(signature)
