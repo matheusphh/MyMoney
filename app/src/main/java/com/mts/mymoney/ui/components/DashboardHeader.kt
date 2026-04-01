@@ -73,7 +73,7 @@ fun DashboardHeader(
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.size(width = 150.dp, height = 100.dp)
+                    modifier = Modifier.size(width = 156.dp, height = 100.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(
