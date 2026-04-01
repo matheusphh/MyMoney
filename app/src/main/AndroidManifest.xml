@@ -22,7 +22,7 @@
             </intent-filter>
         </activity>
         <service
-            android:name=".FinanceNotificationService"
+            android:name=".service.FinanceNotificationService"
             android:label="Automação MyMoney"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">

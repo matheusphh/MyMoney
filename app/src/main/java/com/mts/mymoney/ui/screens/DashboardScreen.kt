@@ -152,7 +152,7 @@ fun DashboardScreen(
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
-                        label = { Text("Descrição (Opcional)") },
+                        label = { Text("Descrição") },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
                     )

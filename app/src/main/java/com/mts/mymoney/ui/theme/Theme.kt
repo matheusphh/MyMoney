@@ -43,7 +43,7 @@ val FinanceDarkColorScheme = darkColorScheme(
     onSurface = Color(0xFFE6E1E5),
     surfaceVariant = Color(0xFF292A2D),
     onSurfaceVariant = Color(0xFFCAC4D0),
-    background = Color(0xFF141218),
+    background = Color(0xFF000000),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005)
 )
