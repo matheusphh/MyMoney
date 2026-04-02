@@ -89,16 +89,6 @@ fun DashboardScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
     ) {
-        // Botão para ativar leitura de notificações (Acesso rápido para testes)
-        TextButton(
-            onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Ativar Leitura Automática", fontSize = 12.sp)
-        }
-
         DashboardHeader(
             accounts = accounts,
             transactions = transactions,
@@ -221,7 +211,21 @@ fun DashboardScreen(
             Text("Ver Histórico Completo", fontWeight = FontWeight.Bold)
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Botão para ativar leitura de notificações
+        TextButton(
+            onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            Icon(
+                Icons.Default.NotificationsActive,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Leitura Automática", fontSize = 12.sp)
+        }
     }
 
     if (accountToDelete != null) {
