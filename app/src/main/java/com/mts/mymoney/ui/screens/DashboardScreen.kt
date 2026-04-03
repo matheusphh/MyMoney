@@ -1,5 +1,6 @@
 package com.mts.mymoney.ui.screens
 
+import android.R
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AlertDialogDefaults.containerColor
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -33,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SearchBarDefaults.colors
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -56,6 +59,7 @@ import com.mts.mymoney.ui.theme.IncomeColor
 import com.mts.mymoney.data.AccountEntity
 import com.mts.mymoney.data.TransactionEntity
 import com.mts.mymoney.ui.components.DashboardHeader
+import com.mts.mymoney.ui.theme.blueColor
 import kotlin.collections.forEach
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -182,11 +186,20 @@ fun DashboardScreen(
                         onClick = {
                             val amountValue = amount.replace(",", ".").toDoubleOrNull()
                             if (amountValue != null) {
-                                onAddTransaction(selectedAccount.id, description, amountValue, isIncome)
+                                onAddTransaction(
+                                    selectedAccount.id,
+                                    description,
+                                    amountValue,
+                                    isIncome
+                                )
                                 description = ""
                                 amount = ""
                             }
                         },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = blueColor, // Background color
+                            contentColor = Color.White
+                        ),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         Text("Adicionar")

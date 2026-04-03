@@ -35,21 +35,23 @@ private val LightColorScheme = lightColorScheme(
 )
 
 val FinanceDarkColorScheme = darkColorScheme(
-    primary = Color(0xFF82D5C8),
+    primary = Color(0xFFFFFFFF),
     onPrimary = Color(0xFF003730),
-    primaryContainer = Color(0xFF005047),
+    primaryContainer = Color(0xFF171719),
     onPrimaryContainer = Color(0xFFA2F2E4),
     surface = Color(0xFF141218),
     onSurface = Color(0xFFE6E1E5),
-    surfaceVariant = Color(0xFF292A2D),
+    surfaceVariant = Color(0xFF171719),
     onSurfaceVariant = Color(0xFFCAC4D0),
     background = Color(0xFF000000),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005)
+
 )
 
-val IncomeColor = Color(0xFF81C784)
-val ExpenseColor = Color(0xFFFFB4AB)
+val IncomeColor = Color(0xFF249a41)
+val ExpenseColor = Color(0xFFe92d18)
+val blueColor = Color(0xFF357afa)
 
 @Composable
 fun MyMoneyTheme(

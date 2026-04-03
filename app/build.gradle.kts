@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.mts.mymoney"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.mts.mymoney"
