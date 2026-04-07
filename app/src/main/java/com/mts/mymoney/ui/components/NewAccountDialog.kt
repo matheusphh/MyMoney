@@ -51,7 +51,7 @@ fun NewAccountDialog(onDismiss: () -> Unit, onConfirm: (String, String?, String)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nova Conta") },
+        title = { Text("Nova Conta", color = MaterialTheme.colorScheme.primary) },
         text = {
             Column {
                 ExposedDropdownMenuBox(
@@ -117,7 +117,7 @@ fun NewAccountDialog(onDismiss: () -> Unit, onConfirm: (String, String?, String)
                     val pkg = selectedBank.packageName.ifBlank { null }
                     onConfirm(name, pkg, initialBalance)
                 }
-            }) { Text("Gravar") }
+            }) { Text("Gravar", color = MaterialTheme.colorScheme.primaryContainer) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
         containerColor = MaterialTheme.colorScheme.surfaceVariant,

@@ -108,7 +108,7 @@ fun DashboardScreen(
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Nova Transação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Nova Transação", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(12.dp))
 
                 ExposedDropdownMenuBox(
@@ -123,7 +123,7 @@ fun DashboardScreen(
                         modifier = Modifier
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
                     )
                     ExposedDropdownMenu(
                         expanded = accountDropdownExpanded,
@@ -221,7 +221,7 @@ fun DashboardScreen(
         ) {
             Icon(Icons.Default.History, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Ver Histórico Completo", fontWeight = FontWeight.Bold)
+            Text("Ver Histórico Completo", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -244,7 +244,7 @@ fun DashboardScreen(
     if (accountToDelete != null) {
         AlertDialog(
             onDismissRequest = { accountToDelete = null },
-            title = { Text("Excluir Conta") },
+            title = { Text("Excluir Conta", color = MaterialTheme.colorScheme.primary) },
             text = { Text("Tem certeza que deseja excluir '${accountToDelete!!.name}'? Todas as movimentações serão apagadas.") },
             confirmButton = {
                 Button(

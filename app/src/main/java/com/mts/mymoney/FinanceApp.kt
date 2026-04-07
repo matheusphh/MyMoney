@@ -64,7 +64,7 @@ fun FinanceApp(viewModel: FinanceViewModel) {
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = { Text("\uD83C\uDFE6 Minhas finanças", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                        title = { Text("\uD83D\uDCB5 Minhas finanças", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
                         actions = {
                             val context = LocalContext.current
                             IconButton(onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) {

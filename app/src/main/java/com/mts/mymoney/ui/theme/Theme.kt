@@ -9,8 +9,12 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import com.google.android.material.color.DynamicColors
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -19,19 +23,20 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = Color(0xFF000000),
+    onPrimary = Color(0xFF000000),
+    primaryContainer = Color(0xFFFFFFFF),
+    onPrimaryContainer = Color(0xFFFFFFFF),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF000000),
+    surfaceVariant = Color(0xFFFFFFFF),
+    onSurfaceVariant = Color(0xFF000000),
+    background = Color(0xFFf6f6f6),
+    error = Color(0xFFFF1B00),
+    onError = Color(0xFFFFFFFF)
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+
+
 )
 
 val FinanceDarkColorScheme = darkColorScheme(
@@ -44,8 +49,8 @@ val FinanceDarkColorScheme = darkColorScheme(
     surfaceVariant = Color(0xFF171719),
     onSurfaceVariant = Color(0xFFCAC4D0),
     background = Color(0xFF000000),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005)
+    error = Color(0xFFFF1B00),
+    onError = Color(0xFFFFFFFF)
 
 )
 
@@ -56,7 +61,7 @@ val blueColor = Color(0xFF357afa)
 @Composable
 fun MyMoneyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -65,8 +70,18 @@ fun MyMoneyTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
 
-        darkTheme -> DarkColorScheme
+        darkTheme -> FinanceDarkColorScheme
         else -> LightColorScheme
+
+    }
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = !darkTheme
+        }
     }
 
     MaterialTheme(

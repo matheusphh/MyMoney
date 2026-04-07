@@ -38,7 +38,7 @@ fun TransactionItem(transaction: TransactionEntity, accountName: String) {
                     text = transaction.description.ifBlank { "(Sem descrição)" },
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (transaction.description.isBlank()) Color.Gray else MaterialTheme.colorScheme.onSurface
+                    color = if (transaction.description.isBlank()) Color.Gray else MaterialTheme.colorScheme.primary
                 )
                 Text(text = accountName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

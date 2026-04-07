@@ -100,8 +100,7 @@ fun DashboardHeader(
                                 onClick = { onDeleteAccount(account) },
                                 modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = "Excluir Conta", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
-                            }
+                                Icon(Icons.Default.Delete, contentDescription = "Excluir Conta", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))                         }
                         }
                     }
                 }
