@@ -154,6 +154,7 @@ fun DashboardScreen(
                         value = amount,
                         onValueChange = { amount = it },
                         label = { Text("Valor") },
+                        placeholder = { Text("R$") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.weight(0.6f),
                         shape = RoundedCornerShape(12.dp)
