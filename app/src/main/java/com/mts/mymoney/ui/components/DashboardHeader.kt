@@ -30,6 +30,7 @@ import com.mts.mymoney.ui.theme.ExpenseColor
 import com.mts.mymoney.ui.theme.IncomeColor
 import com.mts.mymoney.data.AccountEntity
 import com.mts.mymoney.data.TransactionEntity
+import java.util.Locale
 
 @Composable
 fun DashboardHeader(
@@ -53,7 +54,7 @@ fun DashboardHeader(
         )
 
         Text(
-            text = "R$ ${"%.2f".format(displayBalance)}",
+            text = "R$ ${"%.2f".format(Locale("pt","BR"), displayBalance)}",
             fontSize = 48.sp,
             fontWeight = FontWeight.ExtraBold,
             color = if (displayBalance >= 0) IncomeColor else ExpenseColor,
@@ -88,7 +89,7 @@ fun DashboardHeader(
                                 modifier = Modifier.padding(end = 24.dp)
                             )
                             Text(
-                                text = "R$ ${"%.2f".format(accountBalance)}",
+                                text = "R$ ${"%.2f".format(Locale("pt","BR"),accountBalance)}",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = if (accountBalance >= 0) IncomeColor else ExpenseColor

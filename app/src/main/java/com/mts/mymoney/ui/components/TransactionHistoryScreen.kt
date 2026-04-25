@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import com.mts.mymoney.ui.theme.ExpenseColor
 import com.mts.mymoney.ui.theme.IncomeColor
 import com.mts.mymoney.data.TransactionEntity
+import java.util.Locale
 
 @Composable
 fun TransactionItem(transaction: TransactionEntity, accountName: String) {
@@ -43,7 +44,7 @@ fun TransactionItem(transaction: TransactionEntity, accountName: String) {
                 Text(text = accountName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                text = "${if (transaction.isIncome) "+" else "-"} R$ ${"%.2f".format(transaction.amount)}",
+                text = "${if (transaction.isIncome) "+" else "-"} R$ ${"%.2f".format(Locale("pt","BR"),transaction.amount)}",
                 color = if (transaction.isIncome) IncomeColor else ExpenseColor,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold

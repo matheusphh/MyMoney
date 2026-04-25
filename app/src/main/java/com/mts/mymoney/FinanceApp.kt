@@ -67,7 +67,7 @@ fun FinanceApp(viewModel: FinanceViewModel) {
             Scaffold(
                 topBar = {
                     TopAppBar(
-                        title = { Text("\uD83D\uDCB5 Minhas finanças", fontWeight = FontWeight.Bold, fontFamily = Typography.titleLarge.fontFamily, color = MaterialTheme.colorScheme.primary) },
+                        title = { Text("Minhas finanças", fontWeight = FontWeight.Bold, fontFamily = Typography.titleLarge.fontFamily, color = MaterialTheme.colorScheme.primary) },
                         actions = {
                             val context = LocalContext.current
                             IconButton(onClick = { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }) {
@@ -123,6 +123,8 @@ fun FinanceApp(viewModel: FinanceViewModel) {
                 onBack = { currentScreen = SCREEN_DASHBOARD }
             )
         }
+
+
     }
 
     if (showNewAccountDialog) {
