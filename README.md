@@ -13,6 +13,7 @@ Open source e escrito 100% em kotlin
 ## Capturas de Tela
 
 <img src="screenshots/Screenshot_20260426_194947_MyMoney.png" width="200"/> <img src="screenshots/Screenshot_20260426_194954_MyMoney.png" width="200"/> <img src="screenshots/Screenshot_20260426_195000_MyMoney.png" width="200"/> 
+
 <img src="screenshots/Screenshot_20260426_195005_MyMoney.png" width="200"/> <img src="screenshots/Screenshot_20260426_195011_MyMoney.png" width="200"/> <img src="screenshots/Screenshot_20260426_195018_MyMoney.png" width="200"/>
 
 ## Deseja ajudar o desenvolvedor?
